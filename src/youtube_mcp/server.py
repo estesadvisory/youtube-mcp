@@ -2,6 +2,7 @@
 
 from fastmcp import FastMCP
 
+from youtube_mcp.captions import CaptionError, Captions
 from youtube_mcp.metadata import Metadata, MetadataError
 from youtube_mcp.reads import ReadError, Reads
 from youtube_mcp.thumbnails import ThumbnailError, Thumbnails
@@ -13,6 +14,7 @@ def create_server(
     uploads: Uploads | None = None,
     thumbnails: Thumbnails | None = None,
     metadata: Metadata | None = None,
+    captions: Captions | None = None,
 ) -> FastMCP:
     """Construct the registry without credentials or external calls."""
     server = FastMCP("youtube-mcp")
@@ -109,5 +111,22 @@ def create_server(
         if metadata is None:
             raise MetadataError("YouTube metadata updates are not configured.")
         return metadata.update(profile_id, video_id, snippet, status)
+
+    @server.tool()
+    def insert_caption(
+        profile_id: str,
+        video_id: str,
+        language: str,
+        name: str,
+        is_draft: bool,
+        media_path: str,
+    ) -> dict:
+        """Insert local UTF-8 SRT on an owned video and verify its track metadata.
+
+        Returns captionExists on conflict; never replaces or deletes a track.
+        """
+        if captions is None:
+            raise CaptionError("YouTube captions are not configured.")
+        return captions.insert(profile_id, video_id, language, name, is_draft, media_path)
 
     return server
