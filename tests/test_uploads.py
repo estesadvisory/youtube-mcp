@@ -343,3 +343,49 @@ def test_insecure_or_symlinked_job_storage_refused(tmp_path):
     linked.symlink_to(insecure, target_is_directory=True)
     with pytest.raises(UploadError):
         JobStore(linked)
+
+
+def test_profile_rebinding_cannot_resume_old_channel_job(rig):
+    uploads, clients, _, _ = rig
+    job = start(uploads)
+    profiles = ProfileStore(
+        [Profile("one", "new-channel", "one", frozenset({YOUTUBE_FORCE_SSL}), "one")]
+    )
+    uploads.reads._profiles = profiles
+    clients["one"].channel = "new-channel"
+    with pytest.raises(UploadError, match="Job channel"):
+        uploads.advance("one", job["job_id"])
+    assert "insert" not in clients["one"].calls
+
+
+def test_partial_lost_reply_resumes_at_server_offset(rig):
+    uploads, clients, state, roots = rig
+    job = start(uploads)
+    client = clients["one"]
+    client.lost_reply = True
+    assert uploads.advance("one", job["job_id"])["state"] == "ambiguous"
+    assert client.offset == 3
+    client.lost_reply = False
+    restarted = Uploads(uploads.reads, JobStore(state), roots, chunk_size=3)
+    assert restarted.advance("one", job["job_id"])["state"] == "succeeded"
+    assert client.calls.count("insert") == 1
+
+
+def test_concurrent_store_instances_send_each_chunk_once(rig):
+    from concurrent.futures import ThreadPoolExecutor
+
+    uploads, clients, state, roots = rig
+    job = start(uploads)
+
+    def advance():
+        store = JobStore(state)
+        try:
+            return Uploads(uploads.reads, store, roots, chunk_size=3).advance("one", job["job_id"])
+        finally:
+            store.connection.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: advance(), range(2)))
+    assert {result["state"] for result in results} == {"uploading", "succeeded"}
+    assert clients["one"].calls.count("insert") == 1
+    assert clients["one"].calls.count("chunk") == 2
