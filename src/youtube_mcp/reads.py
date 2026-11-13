@@ -14,6 +14,10 @@ class YouTubeClient(Protocol):
 
     def list(self, resource: str, **parameters: Any) -> dict[str, Any]: ...
 
+    def insert_caption(self, body: dict[str, Any], media: bytes, *, part: str) -> dict[str, Any]:
+        """Insert SRT once; raise captions.CaptionExists for 409 captionExists."""
+        ...
+
     def set_thumbnail(self, video_id: str, media: bytes, mime_type: str) -> dict[str, Any]:
         """Set a thumbnail once; return the thumbnails.set response."""
         ...
