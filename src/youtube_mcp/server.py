@@ -3,10 +3,15 @@
 from fastmcp import FastMCP
 
 from youtube_mcp.reads import ReadError, Reads
+from youtube_mcp.thumbnails import ThumbnailError, Thumbnails
 from youtube_mcp.uploads import UploadError, Uploads
 
 
-def create_server(reads: Reads | None = None, uploads: Uploads | None = None) -> FastMCP:
+def create_server(
+    reads: Reads | None = None,
+    uploads: Uploads | None = None,
+    thumbnails: Thumbnails | None = None,
+) -> FastMCP:
     """Construct the registry without credentials or external calls."""
     server = FastMCP("youtube-mcp")
 
@@ -81,5 +86,15 @@ def create_server(reads: Reads | None = None, uploads: Uploads | None = None) ->
         if uploads is None:
             raise UploadError("YouTube uploads are not configured.")
         return uploads.advance(profile_id, job_id)
+
+    @server.tool()
+    def set_thumbnail(profile_id: str, video_id: str, media_path: str) -> dict:
+        """Set a local JPEG/PNG on an owned video; verify a returned thumbnail URL.
+
+        Success confirms URL metadata only, never byte-for-byte image identity.
+        """
+        if thumbnails is None:
+            raise ThumbnailError("YouTube thumbnails are not configured.")
+        return thumbnails.set(profile_id, video_id, media_path)
 
     return server
