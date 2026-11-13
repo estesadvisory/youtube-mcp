@@ -294,6 +294,8 @@ class Uploads:
                 if not isinstance(actual, dict):
                     matches = False
                     continue
+                if section == "status" and "publishAt" not in expected[section]:
+                    matches = matches and actual.get("publishAt") is None
                 for key, value in expected[section].items():
                     if key == "containsSyntheticMedia" and key not in actual:
                         continue
