@@ -2,8 +2,9 @@
 
 A Python MCP server for YouTube publishing, built from scratch under
 [portfolio-ops #285](https://github.com/estesadvisory/portfolio-ops/issues/285).
-MIT licensed. Slice 1 supplies only a transport shell and a `health` tool.
-There is no YouTube client, credential provider, or publishing operation yet.
+MIT licensed. Slice 1 supplies a transport shell and a `health` tool; Slice 2
+adds an offline profile contract and credential-provider interface. There is no
+YouTube client or publishing operation yet.
 
 Requires Python 3.11 or newer.
 
@@ -42,3 +43,20 @@ CI repeats lint and subprocess transport tests on Python 3.11 and 3.13 and runs
 Gitleaks against full git history. Tests start only local processes/listeners;
 no live Google service or credentials are used. Private hosting, IaC, Google
 setup, OAuth, and secret-store wiring are outside this repository slice.
+
+Slice 2 adds the offline core contract in `youtube_mcp.profiles`. Construct a
+`Profile` with `profile_id`, pinned `channel_id`, display `label`,
+`granted_scopes` (full OAuth scope URLs), and an opaque `credential_ref`.
+`ProfileStore.resolve(profile_id)` requires an exact explicit id and the
+`https://www.googleapis.com/auth/youtube.force-ssl` grant. Labels/channel titles
+never select a profile; a missing id never selects a default, even with one
+configured profile. Duplicate ids are rejected. Scope sets are immutable snapshots.
+
+The record contains no token fields. Keep token bytes outside profiles behind the
+`CredentialProvider` protocol; `InMemoryCredentialProvider` is an offline fake
+returning a redacted-repr `Credential`. Profile resolution returns only the pinned
+record and does not call the provider. Adapters must use safe fixed-message errors
+and omit credentials, references, and upstream error chains from diagnostics.
+Redacted repr is defensive only: never serialize/log credential values or profile
+records wholesale. References are opaque lookup keys, not credential material.
+This slice adds no MCP tools, persistence, OAuth, 1Password, or Google calls.
