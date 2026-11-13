@@ -68,8 +68,9 @@ def rig(tmp_path):
         Profile(name, "UC-" + name, name, frozenset({YOUTUBE_FORCE_SSL}), name)
         for name in ("one", "two")
     )
-    credentials = InMemoryCredentialProvider({name: Credential(name.encode())
-                                               for name in ("one", "two")})
+    credentials = InMemoryCredentialProvider(
+        {name: Credential(name.encode()) for name in ("one", "two")}
+    )
     clients = {name: FakeUploadClient("UC-" + name) for name in ("one", "two")}
     reads = Reads(profiles, credentials, lambda credential: clients[credential.value.decode()])
     media = tmp_path / "media"
@@ -82,10 +83,15 @@ def rig(tmp_path):
 
 
 def start(uploads, profile="one", **overrides):
-    arguments = dict(profile_id=profile, media_path="tiny.mp4",
-                     snippet={"title": "title", "description": "description", "categoryId": "22"},
-                     privacy_status="private", self_declared_made_for_kids=False,
-                     contains_synthetic_media=True, publish_at="2027-01-01T00:00:00Z")
+    arguments = dict(
+        profile_id=profile,
+        media_path="tiny.mp4",
+        snippet={"title": "title", "description": "description", "categoryId": "22"},
+        privacy_status="private",
+        self_declared_made_for_kids=False,
+        contains_synthetic_media=True,
+        publish_at="2027-01-01T00:00:00Z",
+    )
     arguments.update(overrides)
     return uploads.start(**arguments)
 
@@ -99,8 +105,10 @@ def test_resumable_flow_and_explicit_write_fields(rig):
     assert result["state"] == "succeeded"
     assert set(result) == {"job_id", "state", "video_id"}
     assert clients["one"].body["status"] == {
-        "privacyStatus": "private", "publishAt": "2027-01-01T00:00:00Z",
-        "selfDeclaredMadeForKids": False, "containsSyntheticMedia": True,
+        "privacyStatus": "private",
+        "publishAt": "2027-01-01T00:00:00Z",
+        "selfDeclaredMadeForKids": False,
+        "containsSyntheticMedia": True,
     }
     assert clients["one"].calls.count("insert") == 1
     uploads.advance("one", job["job_id"])
@@ -134,10 +142,14 @@ def test_ambiguous_completion_looks_up_before_sending_again(rig):
     assert client.calls == ["channels", "lookup", "videos"]
 
 
-@pytest.mark.parametrize("visible,mismatch,expected", [
-    (False, False, "verification_pending"), (True, True, "mismatch"),
-    (True, False, "succeeded"),
-])
+@pytest.mark.parametrize(
+    "visible,mismatch,expected",
+    [
+        (False, False, "verification_pending"),
+        (True, True, "mismatch"),
+        (True, False, "succeeded"),
+    ],
+)
 def test_pending_is_distinct_from_mismatch_and_synthetic_omission(rig, visible, mismatch, expected):
     uploads, clients, _, _ = rig
     job = start(uploads)
@@ -161,11 +173,16 @@ def test_bound_guard_zero_mutations(rig):
     assert not {"insert", "chunk"} & set(clients["one"].calls)
 
 
-@pytest.mark.parametrize("arguments", [
-    {"privacy_status": "public"}, {"privacy_status": "unlisted"},
-    {"privacy_status": ""}, {"self_declared_made_for_kids": None},
-    {"contains_synthetic_media": 1},
-])
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"privacy_status": "public"},
+        {"privacy_status": "unlisted"},
+        {"privacy_status": ""},
+        {"self_declared_made_for_kids": None},
+        {"contains_synthetic_media": 1},
+    ],
+)
 def test_invalid_status_refused_without_calls(rig, arguments):
     uploads, clients, _, _ = rig
     with pytest.raises(UploadError):
@@ -173,7 +190,9 @@ def test_invalid_status_refused_without_calls(rig, arguments):
     assert clients["one"].calls == []
 
 
-@pytest.mark.parametrize("media", ["../outside.mp4", "https://example.com/file", "file:///etc/passwd"])
+@pytest.mark.parametrize(
+    "media", ["../outside.mp4", "https://example.com/file", "file:///etc/passwd"]
+)
 def test_media_escape_and_url_refused(rig, media):
     uploads, clients, _, roots = rig
     (roots["one"].parent / "outside.mp4").write_bytes(b"x")
@@ -200,3 +219,127 @@ def test_two_profile_job_isolation(rig):
         uploads.advance(name, job["job_id"])
         assert uploads.advance(name, job["job_id"])["state"] == "succeeded"
         assert clients[name].calls.count("insert") == 1
+
+
+async def test_mcp_upload_tools_required_fields_and_safe_output(rig):
+    from fastmcp import Client
+
+    from youtube_mcp.server import create_server
+
+    uploads, _, _, _ = rig
+    async with Client(create_server(uploads.reads, uploads)) as client:
+        arguments = dict(
+            profile_id="one",
+            media_path="tiny.mp4",
+            snippet={"title": "t", "description": "d", "categoryId": "22"},
+            privacy_status="private",
+            self_declared_made_for_kids=False,
+            contains_synthetic_media=True,
+        )
+        tools = {tool.name: tool for tool in await client.list_tools()}
+        assert {"privacy_status", "self_declared_made_for_kids", "contains_synthetic_media"} <= set(
+            tools["upload_video"].inputSchema["required"]
+        )
+        job = (await client.call_tool("upload_video", arguments)).data
+        for _ in range(2):
+            result = await client.call_tool(
+                "resume_upload", {"profile_id": "one", "job_id": job["job_id"]}
+            )
+        assert result.data["state"] == "succeeded"
+        assert "synthetic-secret" not in repr(result)
+    async with Client(create_server()) as client:
+        result = await client.call_tool("upload_video", arguments, raise_on_error=False)
+        assert result.is_error
+
+
+@pytest.mark.parametrize(
+    "section,field,value",
+    [
+        ("snippet", "title", "other"),
+        ("snippet", "description", "other"),
+        ("snippet", "categoryId", "99"),
+        ("status", "privacyStatus", "public"),
+        ("status", "publishAt", "2028-01-01T00:00:00Z"),
+        ("status", "selfDeclaredMadeForKids", True),
+        ("status", "containsSyntheticMedia", False),
+    ],
+)
+def test_each_observed_field_mismatch_fails(rig, section, field, value):
+    uploads, clients, _, _ = rig
+    job = start(uploads)
+    uploads.advance("one", job["job_id"])
+    client = clients["one"]
+    original = client.list
+
+    def changed(resource, **parameters):
+        response = original(resource, **parameters)
+        if resource == "videos":
+            response["items"][0][section][field] = value
+        return response
+
+    client.list = changed
+    assert uploads.advance("one", job["job_id"])["state"] == "mismatch"
+
+
+def test_lost_initial_session_response_never_reinserts(rig):
+    uploads, clients, state, roots = rig
+    job = start(uploads)
+    client = clients["one"]
+
+    def fail(*args):
+        client.calls.append("insert")
+        raise OSError("https://secret.invalid/token")
+
+    client.begin_insert = fail
+    assert uploads.advance("one", job["job_id"])["state"] == "ambiguous"
+    restarted = Uploads(uploads.reads, JobStore(state), roots)
+    assert restarted.advance("one", job["job_id"])["state"] == "ambiguous"
+    assert client.calls.count("insert") == 1
+
+
+def test_probe_failure_exposes_no_secret_and_sends_no_chunk(rig):
+    uploads, clients, _, _ = rig
+    job = start(uploads)
+    client = clients["one"]
+
+    def fail(*args):
+        raise RuntimeError("synthetic-secret")
+
+    client.probe_insert = fail
+    result = uploads.advance("one", job["job_id"])
+    assert result["state"] == "ambiguous"
+    assert "synthetic-secret" not in repr(result)
+    assert "chunk" not in client.calls
+
+
+def test_missing_profile_and_media_root_never_fall_back(rig):
+    from youtube_mcp.profiles import ProfileError
+
+    uploads, clients, _, _ = rig
+    for profile in (None, "unknown", ""):
+        with pytest.raises(ProfileError):
+            start(uploads, profile)
+    uploads.roots.pop("one")
+    with pytest.raises(UploadError):
+        start(uploads)
+    assert all(not client.calls for client in clients.values())
+
+
+def test_changed_media_is_refused_before_insert(rig):
+    uploads, clients, _, roots = rig
+    job = start(uploads)
+    (roots["one"] / "tiny.mp4").write_bytes(b"654321")
+    with pytest.raises(UploadError):
+        uploads.advance("one", job["job_id"])
+    assert "insert" not in clients["one"].calls
+
+
+def test_insecure_or_symlinked_job_storage_refused(tmp_path):
+    insecure = tmp_path / "insecure"
+    insecure.mkdir(mode=0o755)
+    with pytest.raises(UploadError):
+        JobStore(insecure)
+    linked = tmp_path / "linked"
+    linked.symlink_to(insecure, target_is_directory=True)
+    with pytest.raises(UploadError):
+        JobStore(linked)
