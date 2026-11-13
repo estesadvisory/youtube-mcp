@@ -133,6 +133,8 @@ async def test_same_schema_and_health_over_both_transports(tmp_path):
                     "get_video",
                     "list_playlists",
                     "list_playlist_items",
+                    "upload_video",
+                    "resume_upload",
                 ]
                 result = await client.call_tool("health", {})
                 assert result.data == {"status": "ok"}

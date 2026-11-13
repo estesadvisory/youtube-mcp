@@ -10,9 +10,24 @@ class ReadError(ValueError):
 
 
 class YouTubeClient(Protocol):
-    """Adapter port for the four Data API list methods; no mutation capability."""
+    """Adapter port for the Data API reads and resumable uploads; no live adapter."""
 
     def list(self, resource: str, **parameters: Any) -> dict[str, Any]: ...
+
+    def begin_insert(self, body: dict[str, Any], size: int, job_id: str) -> str:
+        """Start resumable videos.insert; return a secret session URL."""
+        ...
+
+    def probe_insert(self, session: str) -> dict[str, Any]:
+        """Read recorded session progress/completion before any retry.
+
+        Return offset and optional video_id. Never log the session URL.
+        """
+        ...
+
+    def upload_chunk(self, session: str, offset: int, data: bytes, total: int) -> dict[str, Any]:
+        """Send one chunk; return offset and optional completed video_id."""
+        ...
 
 
 class ClientFactory(Protocol):

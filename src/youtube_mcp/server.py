@@ -3,9 +3,10 @@
 from fastmcp import FastMCP
 
 from youtube_mcp.reads import ReadError, Reads
+from youtube_mcp.uploads import UploadError, Uploads
 
 
-def create_server(reads: Reads | None = None) -> FastMCP:
+def create_server(reads: Reads | None = None, uploads: Uploads | None = None) -> FastMCP:
     """Construct the registry without credentials or external calls."""
     server = FastMCP("youtube-mcp")
 
@@ -40,5 +41,45 @@ def create_server(reads: Reads | None = None) -> FastMCP:
     ) -> dict:
         """Read a playlist page using the explicitly selected profile's grant."""
         return configured().playlist_items(profile_id, playlist_id, page_token)
+
+    @server.tool()
+    def upload_video(
+        profile_id: str,
+        media_path: str,
+        snippet: dict,
+        privacy_status: str,
+        self_declared_made_for_kids: bool,
+        contains_synthetic_media: bool,
+        publish_at: str | None = None,
+    ) -> dict:
+        """Start a resumable upload job for an explicit profile and allowed local file.
+
+        Both audience/disclosure booleans and privacy are required. A schedule
+        requires private privacy. Call resume_upload to advance the job.
+        """
+        if uploads is None:
+            raise UploadError("YouTube uploads are not configured.")
+        job = uploads.start(
+            profile_id,
+            media_path,
+            snippet,
+            privacy_status,
+            self_declared_made_for_kids,
+            contains_synthetic_media,
+            publish_at,
+        )
+
+        return uploads.advance(profile_id, job["job_id"])
+
+    @server.tool()
+    def resume_upload(profile_id: str, job_id: str) -> dict:
+        """Advance a recorded upload by one chunk or retry pending verification.
+
+        Returns only job id, state and video id; resumable URLs are secrets.
+        An ambiguous job without a recorded session requires operator recovery.
+        """
+        if uploads is None:
+            raise UploadError("YouTube uploads are not configured.")
+        return uploads.advance(profile_id, job_id)
 
     return server
