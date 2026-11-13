@@ -3,8 +3,8 @@
 A Python MCP server for YouTube publishing, built from scratch under
 [portfolio-ops #285](https://github.com/estesadvisory/portfolio-ops/issues/285).
 MIT licensed. Slice 1 supplies a transport shell and a `health` tool; Slice 2
-adds an offline profile contract and credential-provider interface. There is no
-YouTube client or publishing operation yet.
+adds an offline profile contract and credential-provider interface. Slice 3 adds guarded read tools through an injectable client port. No publishing
+operation or live Google adapter is included.
 
 Requires Python 3.11 or newer.
 
@@ -60,3 +60,23 @@ and omit credentials, references, and upstream error chains from diagnostics.
 Redacted repr is defensive only: never serialize/log credential values or profile
 records wholesale. References are opaque lookup keys, not credential material.
 This slice adds no MCP tools, persistence, OAuth, 1Password, or Google calls.
+
+
+Slice 3 exposes `get_channel(profile_id)`, `get_video(profile_id, video_id)`,
+`list_playlists(profile_id, page_token=None)`, and
+`list_playlist_items(profile_id, playlist_id, page_token=None)` on both transports.
+Every call requires an explicit profile id and checks `channels.list(mine=true)`
+for exactly one channel matching that profile's pin. Video reads additionally
+require `snippet.channelId` to match; missing, ambiguous, or foreign videos fail
+closed. Playlist reads preserve the API page response and continuation token;
+playlist items may include third-party videos and are not an ownership assertion.
+
+Embedders inject `Reads(ProfileStore(...), credential_provider, client_factory)`
+into `create_server(reads)`. The factory receives only the selected credential;
+its client implements `list(resource, **parameters)` for `channels`, `videos`,
+`playlists`, and `playlistItems` (the corresponding Data API `.list` methods).
+Adapters must omit credential material from diagnostics. No adapter or credential
+configuration is loaded at startup; without injection the read tools fail closed.
+`Reads.require_owned_video` is the reusable guard for later write slices; this
+slice has no mutation port or mutation tool. Future writes must use the checked
+profile/client context and must not switch accounts after checking ownership.
