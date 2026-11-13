@@ -4,6 +4,7 @@ from fastmcp import FastMCP
 
 from youtube_mcp.captions import CaptionError, Captions
 from youtube_mcp.metadata import Metadata, MetadataError
+from youtube_mcp.playlists import PlaylistError, Playlists
 from youtube_mcp.reads import ReadError, Reads
 from youtube_mcp.thumbnails import ThumbnailError, Thumbnails
 from youtube_mcp.uploads import UploadError, Uploads
@@ -15,6 +16,7 @@ def create_server(
     thumbnails: Thumbnails | None = None,
     metadata: Metadata | None = None,
     captions: Captions | None = None,
+    playlists: Playlists | None = None,
 ) -> FastMCP:
     """Construct the registry without credentials or external calls."""
     server = FastMCP("youtube-mcp")
@@ -128,5 +130,12 @@ def create_server(
         if captions is None:
             raise CaptionError("YouTube captions are not configured.")
         return captions.insert(profile_id, video_id, language, name, is_draft, media_path)
+
+    @server.tool()
+    def assign_playlist(profile_id: str, video_id: str, playlist_id: str) -> dict:
+        """Add an owned video to an existing owned playlist and verify membership."""
+        if playlists is None:
+            raise PlaylistError("YouTube playlist assignments are not configured.")
+        return playlists.assign(profile_id, video_id, playlist_id)
 
     return server
