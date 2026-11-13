@@ -127,7 +127,13 @@ async def test_same_schema_and_health_over_both_transports(tmp_path):
                     for tool in await client.list_tools()
                 ]
                 assert http_tools == stdio_tools
-                assert [tool["name"] for tool in http_tools] == ["health"]
+                assert [tool["name"] for tool in http_tools] == [
+                    "health",
+                    "get_channel",
+                    "get_video",
+                    "list_playlists",
+                    "list_playlist_items",
+                ]
                 result = await client.call_tool("health", {})
                 assert result.data == {"status": "ok"}
         finally:
