@@ -389,3 +389,23 @@ def test_concurrent_store_instances_send_each_chunk_once(rig):
     assert {result["state"] for result in results} == {"uploading", "succeeded"}
     assert clients["one"].calls.count("insert") == 1
     assert clients["one"].calls.count("chunk") == 2
+
+
+@pytest.mark.parametrize("status", [None, "malformed", {"publishAt": "2028-01-01T00:00:00Z"}])
+def test_malformed_or_unrequested_schedule_is_mismatch(rig, status):
+    uploads, clients, _, _ = rig
+    job = start(uploads, publish_at=None)
+    uploads.advance("one", job["job_id"])
+    original = clients["one"].list
+
+    def changed(resource, **parameters):
+        response = original(resource, **parameters)
+        if resource == "videos":
+            if isinstance(status, dict):
+                response["items"][0]["status"].update(status)
+            else:
+                response["items"][0]["status"] = status
+        return response
+
+    clients["one"].list = changed
+    assert uploads.advance("one", job["job_id"])["state"] == "mismatch"
