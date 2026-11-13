@@ -161,7 +161,7 @@ class Uploads:
             size = info.st_size
             if size == 0:
                 raise UploadError("Media must not be empty.")
-        self.reads._bound(profile_id)
+        profile, _, _ = self.reads._bound(profile_id)
         status = {
             "privacyStatus": privacy_status,
             "selfDeclaredMadeForKids": self_declared_made_for_kids,
@@ -172,6 +172,7 @@ class Uploads:
         job = dict(
             job_id=str(uuid4()),
             profile_id=profile_id,
+            channel_id=profile.channel_id,
             media_path=media_path,
             size=size,
             fingerprint=fingerprint,
@@ -196,6 +197,8 @@ class Uploads:
             if job["profile_id"] != profile_id:
                 raise UploadError("Job does not belong to this profile.")
             profile, client, _ = self.reads._bound(profile_id)
+            if job["channel_id"] != profile.channel_id:
+                raise UploadError("Job channel differs from the configured profile.")
             if job["state"] in ("succeeded", "mismatch"):
                 return self._public(job)
             if job["video_id"]:
