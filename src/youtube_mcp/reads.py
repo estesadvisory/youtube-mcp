@@ -18,6 +18,10 @@ class YouTubeClient(Protocol):
         """Set a thumbnail once; return the thumbnails.set response."""
         ...
 
+    def update(self, body: dict[str, Any], *, part: str) -> dict[str, Any]:
+        """Replace selected video parts; no live adapter in core."""
+        ...
+
     def begin_insert(self, body: dict[str, Any], size: int, job_id: str) -> str:
         """Start resumable videos.insert; return a secret session URL."""
         ...
