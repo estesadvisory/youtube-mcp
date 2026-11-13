@@ -2,6 +2,7 @@
 
 from fastmcp import FastMCP
 
+from youtube_mcp.metadata import Metadata, MetadataError
 from youtube_mcp.reads import ReadError, Reads
 from youtube_mcp.thumbnails import ThumbnailError, Thumbnails
 from youtube_mcp.uploads import UploadError, Uploads
@@ -11,6 +12,7 @@ def create_server(
     reads: Reads | None = None,
     uploads: Uploads | None = None,
     thumbnails: Thumbnails | None = None,
+    metadata: Metadata | None = None,
 ) -> FastMCP:
     """Construct the registry without credentials or external calls."""
     server = FastMCP("youtube-mcp")
@@ -96,5 +98,16 @@ def create_server(
         if thumbnails is None:
             raise ThumbnailError("YouTube thumbnails are not configured.")
         return thumbnails.set(profile_id, video_id, media_path)
+
+    @server.tool()
+    def update_video(profile_id: str, video_id: str, snippet: dict, status: dict) -> dict:
+        """Update an owned video; status.selfDeclaredMadeForKids is required.
+
+        Only supplied fields change. publishAt requires explicit private privacy.
+        Read-back returns succeeded, mismatch, or verification_pending.
+        """
+        if metadata is None:
+            raise MetadataError("YouTube metadata updates are not configured.")
+        return metadata.update(profile_id, video_id, snippet, status)
 
     return server
