@@ -14,6 +14,10 @@ class YouTubeClient(Protocol):
 
     def list(self, resource: str, **parameters: Any) -> dict[str, Any]: ...
 
+    def set_thumbnail(self, video_id: str, media: bytes, mime_type: str) -> dict[str, Any]:
+        """Set a thumbnail once; return the thumbnails.set response."""
+        ...
+
     def begin_insert(self, body: dict[str, Any], size: int, job_id: str) -> str:
         """Start resumable videos.insert; return a secret session URL."""
         ...
