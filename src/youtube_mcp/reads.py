@@ -18,6 +18,10 @@ class YouTubeClient(Protocol):
         """Insert SRT once; raise captions.CaptionExists for 409 captionExists."""
         ...
 
+    def insert_playlist_item(self, body: dict[str, Any], *, part: str) -> dict[str, Any]:
+        """Insert one playlist membership; no live adapter in core."""
+        ...
+
     def set_thumbnail(self, video_id: str, media: bytes, mime_type: str) -> dict[str, Any]:
         """Set a thumbnail once; return the thumbnails.set response."""
         ...
