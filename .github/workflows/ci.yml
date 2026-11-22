@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, fleet-azure]
     strategy:
       matrix:
         python: ["3.11", "3.13"]
@@ -18,7 +18,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, fleet-azure]
     steps:
       - uses: actions/checkout@v4
         with:
